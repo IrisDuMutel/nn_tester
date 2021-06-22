@@ -25,15 +25,15 @@ import message_filters
 # license removed for brevity
 
 class NNconnector:
-    def __init__(self):
-        self.tf_model = tf.saved_model.load('/home/iris/Desktop/Training_ball/results/rb_06/b_test')
+    def __init__(self):# /home/iris/Desktop/Training_ball/results/rb_06/b_test
+        self.tf_model = tf.saved_model.load('/home/iris/catkin_ws/src/nn_tester/NNetworks/RollerBal/RollerBall_saved')
         rospy.init_node('NNconnector', anonymous=True)
         self.pub = rospy.Publisher('/cmd_vel',Twist,queue_size=10)
-        self.sub = message_filters.Subscriber('odometry',TestMsg,queue_size=1,buff_size=2**24)
-        ts = message_filters.ApproximateTimeSynchronizer([self.sub], queue_size=10, slop=1, allow_headerless=True)
+        self.sub = message_filters.Subscriber('odometry',TestMsg,queue_size=1)
+        ts = message_filters.ApproximateTimeSynchronizer([self.sub], queue_size=1, slop=1, allow_headerless=True)
         ts.registerCallback(self._callback,self.pub)
         self.msg = Twist()
-        rospy.Rate(50)
+        # rospy.Rate(50)
         # spin() simply keeps python from exiting until this node is stopped
         rospy.spin()
         
@@ -49,8 +49,9 @@ class NNconnector:
         # ball_vel1 = data_sub.ball_vel[0]
         # ball_vel2 = data_sub.ball_vel[1]
         
-        X = np.array([[data_sub.cube_pos[0],data_sub.cube_pos[1],data_sub.cube_pos[2],data_sub.ball_pos[0],data_sub.ball_pos[1],data_sub.ball_pos[2],data_sub.ball_vel[0],data_sub.ball_vel[1]]]).astype(np.float32)
-        y = self.tf_model(obs_0=X)
+        # X = np.array([[data_sub.cube_pos[0],data_sub.cube_pos[1],data_sub.cube_pos[2],data_sub.ball_pos[0],data_sub.ball_pos[1],data_sub.ball_pos[2],data_sub.ball_vel[0],data_sub.ball_vel[1]]]).astype(np.float32)
+        # y = self.tf_model(obs_0=X)
+        y = self.tf_model(obs_0=np.array([[data_sub.cube_pos[0],data_sub.cube_pos[1],data_sub.cube_pos[2],data_sub.ball_pos[0],data_sub.ball_pos[1],data_sub.ball_pos[2],data_sub.ball_vel[0],data_sub.ball_vel[1]]]).astype(np.float32))
         
         # print(y[2][0][0].numpy())
         # print(y[2][0][1].numpy())
