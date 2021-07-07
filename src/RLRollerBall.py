@@ -318,8 +318,7 @@ class RLRollerBall:
 if __name__ == '__main__':
     try:
         thisnode = RLRollerBall()
-        
-        
+
         # Where should this line go!?!?!?!??!?!?!??!?!
         thisnode.run()
         
