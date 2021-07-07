@@ -6,11 +6,12 @@ import tensorflow as tf
 import numpy as np
 import math
 from PIL import Image
+from tensorflow.python.ops.numpy_ops import np_dtypes
 import rospy
 from std_msgs import msg
 # from tensorboardX import SummaryWriter
 from std_msgs.msg import String
-from robotics_demo.msg import ObservationMsg
+from robotics_demo.msg import OdometryMsg
 from geometry_msgs.msg import Twist
 import message_filters
 import random
@@ -18,10 +19,10 @@ import random
 import tensorflow as tf
 tf.compat.v1.disable_eager_execution()
 
-from keras.models import Model
-from keras.layers import Input, Dense
-from keras import backend as K
-from keras.optimizers import Adam
+from tensorflow.keras import Model
+from tensorflow.keras.layers import Input, Dense
+from tensorflow.keras import backend as K
+from tensorflow.keras.optimizers import Adam
 
 
 import matplotlib.pyplot as plt
@@ -87,25 +88,58 @@ class RLRollerBall:
         self.val = False  # to do or not to do random actions
         self.reward = []
         rospy.init_node('NNconnector', anonymous=True)
-        self.pub = rospy.Publisher('/BallActions',ObservationMsg,queue_size=10)
-        self.sub = message_filters.Subscriber('BallOdometry',ObservationMsg,queue_size=1)
+        self.pubActions = rospy.Publisher('/BallActions',Twist,queue_size=10)
+        self.pubStates = rospy.Publisher('ResetScene',OdometryMsg,queue_size=1)
+        self.sub = message_filters.Subscriber('BallOdometry',OdometryMsg,queue_size=1)
         ts = message_filters.ApproximateTimeSynchronizer([self.sub], queue_size=1, slop=1, allow_headerless=True)
-        ts.registerCallback(self._callback,self.pub)
-        self.msg = ObservationMsg()
+        ts.registerCallback(self._callback,self.pubActions, self.pubStates)
+        self.msg = OdometryMsg()
+        self.msgActions = Twist()
+        self.OnEpisodeBegin()
         rospy.spin()
         
-    def _callback(self,data_sub,pub_vel):
+    def _callback(self,data_sub,pub_Actions, pub_States):
         self.cube_pos = data_sub.cube_pos
         self.ball_pos = data_sub.ball_pos
         self.ball_vel = data_sub.ball_vel
         
-        self.run()
+        # self.run()
         
 
     def SetReward(self, value):
         #do something
         print("a")
         self.reward.append(value)
+        
+    def OnEpisodeBegin(self):
+        
+        self.msg.ball_vel = [0, 0]
+        # self.msg.ball_vel[1] = 0 # Y velocity of the ball
+        self.msg.ball_pos = [0, 0.5, 0]
+        # self.msg.ball_pos[1] = 0.5 # Y position of ball
+        # self.msg.ball_pos[2] = 0 # Z position of ball
+        self.msg.cube_pos = [random.uniform(0, 1)*8-4, 0.5, random.uniform(0, 1)*8-4]
+        # self.msg.cube_pos[0] =  0.5 # Y position of the target
+        # self.msg.cube_pos[0] = random.uniform(0, 1)*8-4  # X position of the target
+        
+        self.observation = [self.msg.cube_pos[0],
+                            self.msg.cube_pos[1],
+                            self.msg.cube_pos[2],
+                            self.msg.ball_pos[0],
+                            self.msg.ball_pos[1],
+                            self.msg.ball_pos[2],
+                            self.msg.ball_vel[0],
+                            self.msg.ball_vel[1]]
+        
+        # Set the scene for the next episode
+        # self.pubStates(self.msg)
+        
+    # This function should return the initial observation for the episode
+    # def reset(self):
+    #     observation = [self.cube_pos,
+    #                   self.ball_pos,
+    #                   self.ball_vel]
+    #     return observation
 
     def EndEpisode(self):
 
@@ -116,10 +150,14 @@ class RLRollerBall:
             self.val = False
         
         # ResetData();
+        
         self.m_StepCount = 0
         self.OnEpisodeBegin()
         
     def get_action_continuous(self):
+        self.observation = np.array(self.observation)
+        # print(self.observation)
+        # print(self.observation.reshape(1, NUM_STATE))
         p = self.actor.predict([self.observation.reshape(1, NUM_STATE), DUMMY_VALUE, DUMMY_ACTION])
         if self.val is False:
             action = action_matrix = p[0] + np.random.normal(loc=0, scale=NOISE, size=p[0].shape)
@@ -127,17 +165,24 @@ class RLRollerBall:
             action = action_matrix = p[0]
         return action, action_matrix, p
 
-    def step(self):
+    def step(self,action):
 
         for _ in range(self.max_steps):
             # Take an action
-            self.pub.publish(self.msg)
+            # self.msg = action
+            # self.pub.publish(self.msg)
+            print(action)
             
             # Get observation
             obs = []
-            obs = [self.cube_pos,
-                      self.ball_pos,
-                      self.ball_vel]
+            obs = [self.msg.cube_pos[0],
+                            self.msg.cube_pos[1],
+                            self.msg.cube_pos[2],
+                            self.msg.ball_pos[0],
+                            self.msg.ball_pos[1],
+                            self.msg.ball_pos[2],
+                            self.msg.ball_vel[0],
+                            self.msg.ball_vel[1]]
             
             distanceToTarget = math.sqrt( ((self.cube_pos[0]-self.ball_pos[0])**2)+((self.cube_pos[2]-self.ball_pos[2])**2) )
             # Are we touching the target?
@@ -161,9 +206,9 @@ class RLRollerBall:
             
         done = self.done
         informat = [0] # What is information, BTW?
-            
-# TODO hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+        
         return obs, reward, done, informat
+    
     
     def get_batch(self):
         batch = [[], [], [], []]
@@ -209,8 +254,8 @@ class RLRollerBall:
         
 
     def run(self):
-        while self.episodes < EPISODES:
-            print("Episode: ", self.episode)
+        while self.episodeNum < EPISODES:
+            print("Episode: ", self.episodeNum)
             obs, action, pred, reward = self.get_batch()
             obs, action, pred, reward = obs[:BUFFER_SIZE], action[:BUFFER_SIZE], pred[:BUFFER_SIZE], reward[:BUFFER_SIZE]
             old_prediction = pred
@@ -228,8 +273,6 @@ class RLRollerBall:
             self.critic_loss_memory.append(critic_loss.history['loss'][-1])
             self.reward_memory.append(np.mean(reward))
             # self.gradient_steps += 1
-            
-            
 
 
     def build_actor_continuous(self):
@@ -269,32 +312,16 @@ class RLRollerBall:
         model.save('critic.h5')
 
         return model
-
-
-            
-            
-            
-            
-        
-
-
-
-
-    def OnEpisodeBegin(self):
-        self.msg.ball_vel[0] = 0 # X velocity of the ball
-        self.msg.ball_vel[1] = 0 # Y velocity of the ball
-        self.msg.ball_pos[0] = 0 # X position of ball
-        self.msg.ball_pos[1] = 0.5 # Y position of ball
-        self.msg.ball_pos[2] = 0 # Z position of ball
-        self.msg.cube_pos[0] = random.uniform(0, 1)*8-4  # X position of the target
-        self.msg.cube_pos[0] =  0.5 # Y position of the target
-        self.msg.cube_pos[0] = random.uniform(0, 1)*8-4  # X position of the target
-
+    
 
 
 if __name__ == '__main__':
     try:
         thisnode = RLRollerBall()
         
-    except rospy.ROSself.ball_poserruptException:
+        
+        # Where should this line go!?!?!?!??!?!?!??!?!
+        thisnode.run()
+        
+    except rospy.ROSInterruptException:
         pass
