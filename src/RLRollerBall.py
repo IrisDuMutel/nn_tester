@@ -77,85 +77,32 @@ class RLRollerBall:
         # self.tf_model = tf.saved_model.load('/home/iris/catkin_ws/src/nn_tester/NNetworks/RollerBal/RollerBall_saved')
         self.critic = self.build_critic()
         self.actor = self.build_actor_continuous()
-        self.episodeNum = 0
-        self.m_StepCount = 0
-        self.max_steps = 600
+        global episodeNum 
+        episodeNum = 0
+        global m_StepCount 
+        m_StepCount = 0
+        global max_steps 
+        max_steps = 600
         # self.gradient_steps = 0
-        self.actor_loss_memory = []
-        self.critic_loss_memory = []
-        self.reward_memory = []
-        self.done = False # completed episode or not
-        self.val = False  # to do or not to do random actions
-        self.reward = []
-        rospy.init_node('NNconnector', anonymous=True)
-        self.pubActions = rospy.Publisher('/BallActions',Twist,queue_size=10)
-        self.pubStates = rospy.Publisher('ResetScene',OdometryMsg,queue_size=1)
-        self.sub = message_filters.Subscriber('BallOdometry',OdometryMsg,queue_size=1)
-        ts = message_filters.ApproximateTimeSynchronizer([self.sub], queue_size=1, slop=1, allow_headerless=True)
-        ts.registerCallback(self._callback,self.pubActions, self.pubStates)
-        self.msg = OdometryMsg()
-        self.msgActions = Twist()
-        self.OnEpisodeBegin()
-        rospy.spin()
+        global actor_loss_memory
+        actor_loss_memory = []
+        global critic_loss_memory
+        critic_loss_memory = []
+        global reward_memory
+        reward_memory = []
+        global done 
+        done = False # completed episode or not
+        global val
+        val = False  # to do or not to do random actions
+        global batch_is_full
+        batch_is_full = False
+        global is_new_episode
+        is_new_episode = True
+        global reward 
+        reward = []
         
-    def _callback(self,data_sub,pub_Actions, pub_States):
-        self.cube_pos = data_sub.cube_pos
-        self.ball_pos = data_sub.ball_pos
-        self.ball_vel = data_sub.ball_vel
-        
-        # self.run()
-        
-
-    def SetReward(self, value):
-        #do something
-        print("a")
-        self.reward.append(value)
-        
-    def OnEpisodeBegin(self):
-        
-        self.msg.ball_vel = [0, 0]
-        # self.msg.ball_vel[1] = 0 # Y velocity of the ball
-        self.msg.ball_pos = [0, 0.5, 0]
-        # self.msg.ball_pos[1] = 0.5 # Y position of ball
-        # self.msg.ball_pos[2] = 0 # Z position of ball
-        self.msg.cube_pos = [random.uniform(0, 1)*8-4, 0.5, random.uniform(0, 1)*8-4]
-        # self.msg.cube_pos[0] =  0.5 # Y position of the target
-        # self.msg.cube_pos[0] = random.uniform(0, 1)*8-4  # X position of the target
-        
-        self.observation = [self.msg.cube_pos[0],
-                            self.msg.cube_pos[1],
-                            self.msg.cube_pos[2],
-                            self.msg.ball_pos[0],
-                            self.msg.ball_pos[1],
-                            self.msg.ball_pos[2],
-                            self.msg.ball_vel[0],
-                            self.msg.ball_vel[1]]
-        
-        # Set the scene for the next episode
-        # self.pubStates(self.msg)
-        
-    # This function should return the initial observation for the episode
-    # def reset(self):
-    #     observation = [self.cube_pos,
-    #                   self.ball_pos,
-    #                   self.ball_vel]
-    #     return observation
-
-    def EndEpisode(self):
-
-        self.episodeNum += 1
-        if self.episodeNum % 100 == 0:
-            self.val = True
-        else:
-            self.val = False
-        
-        # ResetData();
-        
-        self.m_StepCount = 0
-        self.OnEpisodeBegin()
-        
-    def get_action_continuous(self):
-        self.observation = np.array(self.observation)
+    def get_action_continuous(self,state):
+        self.observation = np.array(state)
         # print(self.observation)
         # print(self.observation.reshape(1, NUM_STATE))
         p = self.actor.predict([self.observation.reshape(1, NUM_STATE), DUMMY_VALUE, DUMMY_ACTION])
@@ -164,117 +111,7 @@ class RLRollerBall:
         else:
             action = action_matrix = p[0]
         return action, action_matrix, p
-
-    def step(self,action):
-
-        for _ in range(self.max_steps):
-            # Take an action
-            # self.msg = action
-            # self.pub.publish(self.msg)
-            print(action)
-            
-            # Get observation
-            obs = []
-            obs = [self.msg.cube_pos[0],
-                            self.msg.cube_pos[1],
-                            self.msg.cube_pos[2],
-                            self.msg.ball_pos[0],
-                            self.msg.ball_pos[1],
-                            self.msg.ball_pos[2],
-                            self.msg.ball_vel[0],
-                            self.msg.ball_vel[1]]
-            
-            distanceToTarget = math.sqrt( ((self.cube_pos[0]-self.ball_pos[0])**2)+((self.cube_pos[2]-self.ball_pos[2])**2) )
-            # Are we touching the target?
-            if (distanceToTarget<1.42):
-                reward = self.SetReward(1)
-                self.EndEpisode()
-                self.done = True
-
-            elif (self.cube_pos[1]<0.5):
-                reward = self.SetReward(-1)
-                self.EndEpisode()
-                self.done = True
-
-        # We surpassed the max number of steps. Start new episode
-        if self.done is False:
-            # The number of steps is over but we didnt touch
-            # the target
-            reward = self.SetReward(-0.1)
-            self.EndEpisode()
-            self.done = True
-            
-        done = self.done
-        informat = [0] # What is information, BTW?
-        
-        return obs, reward, done, informat
     
-    
-    def get_batch(self):
-        batch = [[], [], [], []]
-
-        tmp_batch = [[], [], []]
-        while len(batch[0]) < BUFFER_SIZE:
-            action, action_matrix, predicted_action = self.get_action_continuous()
-        observation, reward, done, info = self.step(action)
-        # self.reward.append(reward) ALREADY DONE INSIDE STEP()
-        
-        tmp_batch[0].append(self.observation)
-        tmp_batch[1].append(action_matrix)
-        tmp_batch[2].append(predicted_action)
-        self.observation = observation
-        
-        if done:
-            print("Done!")
-            self.transform_reward()
-            if self.val is False:  # for now this is always true
-                for i in range(len(tmp_batch[0])):
-                    obs, action, pred = tmp_batch[0][i], tmp_batch[1][i], tmp_batch[2][i]
-                    r = self.reward[i]
-                    batch[0].append(obs)
-                    batch[1].append(action)
-                    batch[2].append(pred)
-                    batch[3].append(r)
-            tmp_batch = [[], [], []]
-            self.EndEpisode()
-            
-        print("Batch full, training nets...")
-        obs, action, pred, reward = np.array(batch[0]), np.array(batch[1]), np.array(batch[2]), np.reshape(np.array(batch[3]), (len(batch[3]), 1))
-        pred = np.reshape(pred, (pred.shape[0], pred.shape[2]))
-        return obs, action, pred, reward
-            
-    # DONT KNOW VERY WELL WHAT THIS FUNCTION DOES     
-    def transform_reward(self):
-        # if self.val is True:
-        #     self.writer.add_scalar('Val episode reward', np.array(self.reward).sum(), self.episode)
-        # else:
-        #     self.writer.add_scalar('Episode reward', np.array(self.reward).sum(), self.episode)
-        for j in range(len(self.reward) - 2, -1, -1):
-            self.reward[j] += self.reward[j + 1] * GAMMA
-        
-
-    def run(self):
-        while self.episodeNum < EPISODES:
-            print("Episode: ", self.episodeNum)
-            obs, action, pred, reward = self.get_batch()
-            obs, action, pred, reward = obs[:BUFFER_SIZE], action[:BUFFER_SIZE], pred[:BUFFER_SIZE], reward[:BUFFER_SIZE]
-            old_prediction = pred
-            pred_values = self.critic.predict(obs)
-            
-            advantage = reward - pred_values
-
-            actor_loss = self.actor.fit([obs, advantage, old_prediction], [action], batch_size=BATCH_SIZE, shuffle=True, epochs=EPOCHS, callbacks=[self.tensorboard_callback])
-            critic_loss = self.critic.fit([obs], [reward], batch_size=BATCH_SIZE, shuffle=True, epochs=EPOCHS, callbacks=[self.tensorboard_callback])
-            # self.writer.add_scalar('Actor loss', actor_loss.history['loss'][-1], self.gradient_steps)
-            # self.writer.add_scalar('Critic loss', critic_loss.history['loss'][-1], self.gradient_steps)
-            # print(actor_loss.history['loss'][-1])
-
-            self.actor_loss_memory.append(actor_loss.history['loss'][-1])
-            self.critic_loss_memory.append(critic_loss.history['loss'][-1])
-            self.reward_memory.append(np.mean(reward))
-            # self.gradient_steps += 1
-
-
     def build_actor_continuous(self):
         state_input = Input(shape=(NUM_STATE,))
         advantage = Input(shape=(1,))
@@ -295,8 +132,7 @@ class RLRollerBall:
         model.save('actor.h5')
 
         return model
-    
-    
+
     def build_critic(self):
 
         state_input = Input(shape=(NUM_STATE,))
@@ -313,14 +149,185 @@ class RLRollerBall:
 
         return model
     
-
-
-if __name__ == '__main__':
-    try:
-        thisnode = RLRollerBall()
-
-        # Where should this line go!?!?!?!??!?!?!??!?!
-        thisnode.run()
+   
         
-    except rospy.ROSInterruptException:
-        pass
+def _callback(data_sub):
+    global callback_msg
+    global observation
+    global agent
+    global max_steps
+    global m_StepCount
+    global done
+    global episodeNum
+    global batch
+    global tmp_batch
+    global batch_is_full
+    global is_new_episode
+    global reward
+    global reward_memory
+    global val
+    global msgOdom
+    global msgActions
+        
+
+    
+    callback_msg = data_sub
+    
+    cube_pos = data_sub.cube_pos
+    ball_pos = data_sub.ball_pos
+    ball_vel = data_sub.ball_vel
+    
+    observation = [ data_sub.cube_pos[0],
+                    data_sub.cube_pos[1],
+                    data_sub.cube_pos[2],
+                    data_sub.ball_pos[0],
+                    data_sub.ball_pos[1],
+                    data_sub.ball_pos[2],
+                    data_sub.ball_vel[0],
+                    data_sub.ball_vel[1]]
+        
+    if episodeNum < EPISODES:
+        
+        if is_new_episode:
+            print("Episode: ", episodeNum)
+            batch = [[], [], [], []]
+            tmp_batch = [[], [], []]
+            is_new_episode = False
+            
+        if len(batch[0]) < BUFFER_SIZE:
+            action, action_matrix, predicted_action = agent.get_action_continuous(observation)
+        ######### STEP CODE ###############    
+        msgActions.linear.x = action[0]
+        msgActions.linear.z = action[2]
+        pubActions.publish(msgActions)
+        observation = [ data_sub.cube_pos[0],
+                        data_sub.cube_pos[1],
+                        data_sub.cube_pos[2],
+                        data_sub.ball_pos[0],
+                        data_sub.ball_pos[1],
+                        data_sub.ball_pos[2],
+                        data_sub.ball_vel[0],
+                        data_sub.ball_vel[1]]
+        
+        if m_StepCount < max_steps:
+            m_StepCount += 1
+            # Take an action
+            # self.msg = action
+            # self.pub.publish(self.msg)
+            distanceToTarget = math.sqrt( ((cube_pos[0]-ball_pos[0])**2)+((cube_pos[2]-ball_pos[2])**2) )
+            # Are we touching the target?
+            if (distanceToTarget<1.42):
+                reward.append(1)
+                if episodeNum % 100 == 0:
+                    val = True
+                else:
+                    val = False        
+                done = True
+            elif (cube_pos[1]<0.5):
+                reward.append(-1)
+                if episodeNum % 100 == 0:
+                    val = True
+                else:
+                    val = False        
+                done = True
+                
+        # We surpassed the max number of steps. Start new episode
+        else:
+            # The number of steps is over before touching target
+            reward.append(-0.1)
+            if episodeNum % 100 == 0:
+                val = True
+            else:
+                val = False        
+            done = True 
+            
+            
+            ############### STEP CODE END ##############
+
+            
+        # informat = [0] # What is information, BTW?
+        tmp_batch[0].append(observation)
+        tmp_batch[1].append(action_matrix)
+        tmp_batch[2].append(predicted_action)
+        
+        # For any reason, the episode is over, so we
+        if done:
+            print("Done!")
+            for j in range(len(reward) - 2, -1, -1):
+                reward[j] += reward[j + 1] * GAMMA
+            if val is False:  # for now this is always true
+                for i in range(len(tmp_batch[0])):
+                    observation, action, pred = tmp_batch[0][i], tmp_batch[1][i], tmp_batch[2][i]
+                    r = reward[i]
+                    batch[0].append(observation)
+                    batch[1].append(action)
+                    batch[2].append(pred)
+                    batch[3].append(r)
+            tmp_batch = [[], [], []]
+            
+            # End episode code run ##########
+            episodeNum += 1
+            if episodeNum % 100 == 0:
+                val = True
+            else:
+                val = False        
+            m_StepCount = 0
+            msgOdom.ball_vel = [0, 0]
+            msgOdom.ball_pos = [0, 0.5, 0]
+            msgOdom.cube_pos = [random.uniform(0, 1)*8-4, 0.5, random.uniform(0, 1)*8-4]
+            
+            observation = [msgOdom.cube_pos[0],
+                                msgOdom.cube_pos[1],
+                                msgOdom.cube_pos[2],
+                                msgOdom.ball_pos[0],
+                                msgOdom.ball_pos[1],
+                                msgOdom.ball_pos[2],
+                                msgOdom.ball_vel[0],
+                                msgOdom.ball_vel[1]]
+            done = False
+            is_new_episode = True
+            pubStates.publish(observation)
+            ######################################
+                
+        print("Batch full, training nets...")
+        observation, action, pred, reward = np.array(batch[0]), np.array(batch[1]), np.array(batch[2]), np.reshape(np.array(batch[3]), (len(batch[3]), 1))
+        pred = np.reshape(pred, (pred.shape[0], pred.shape[2]))
+        # return obs, action, pred, reward
+        
+        observation, action, pred, reward = observation[:BUFFER_SIZE], action[:BUFFER_SIZE], pred[:BUFFER_SIZE], reward[:BUFFER_SIZE]
+        old_prediction = pred
+        pred_values = agent.critic.predict(observation)
+        
+        advantage = reward - pred_values
+        actor_loss = agent.actor.fit([observation, advantage, old_prediction], [action], batch_size=BATCH_SIZE, shuffle=True, epochs=EPOCHS, callbacks=[agent.tensorboard_callback])
+        critic_loss = agent.critic.fit([observation], [reward], batch_size=BATCH_SIZE, shuffle=True, epochs=EPOCHS, callbacks=[agent.tensorboard_callback])
+        # self.writer.add_scalar('Actor loss', actor_loss.history['loss'][-1], self.gradient_steps)
+        # self.writer.add_scalar('Critic loss', critic_loss.history['loss'][-1], self.gradient_steps)
+        # print(actor_loss.history['loss'][-1])
+        agent.actor_loss_memory.append(actor_loss.history['loss'][-1])
+        agent.critic_loss_memory.append(critic_loss.history['loss'][-1])
+        reward_memory.append(np.mean(reward))
+        # self.gradient_steps += 1
+            
+
+
+    
+
+
+agent = RLRollerBall()
+
+rospy.init_node('NNconnector', anonymous=True)
+pubActions = rospy.Publisher('/BallActions',Twist,queue_size=10)
+pubStates = rospy.Publisher('ResetScene',OdometryMsg,queue_size=1)
+# self.sub = message_filters.Subscriber('BallOdometry',OdometryMsg,queue_size=1)
+# ts = message_filters.ApproximateTimeSynchronizer([self.sub], queue_size=1, slop=1, allow_headerless=True)
+# ts.registerCallback(self._callback,self.pubActions, self.pubStates)
+sub = rospy.Subscriber('BallOdometry',OdometryMsg,_callback,queue_size=1)
+global msgOdom
+msgOdom = OdometryMsg()
+global msgActions
+msgActions = Twist()
+
+        
+while not rospy.is_shutdown():
+    rospy.spin()
