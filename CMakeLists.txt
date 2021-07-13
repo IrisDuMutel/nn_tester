@@ -162,6 +162,7 @@ catkin_install_python(PROGRAMS
   src/nn_tester.py
   src/nn_tester_runtime.py
   src/RLRollerBall.py
+  src/SimplePubSub.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

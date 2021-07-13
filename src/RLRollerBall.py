@@ -101,16 +101,20 @@ class RLRollerBall:
         global reward 
         reward = []
         
-    def get_action_continuous(self,state):
-        self.observation = np.array(state)
-        # print(self.observation)
-        # print(self.observation.reshape(1, NUM_STATE))
-        p = self.actor.predict([self.observation.reshape(1, NUM_STATE), DUMMY_VALUE, DUMMY_ACTION])
-        if self.val is False:
-            action = action_matrix = p[0] + np.random.normal(loc=0, scale=NOISE, size=p[0].shape)
-        else:
-            action = action_matrix = p[0]
-        return action, action_matrix, p
+    # def get_action_continuous(self,state):
+    #     self.observation = np.array(state)
+    #     # print(self.observation)
+    #     # print(self.observation.reshape(1, NUM_STATE)).reshape(1, NUM_STATE)
+    #     # self.observation.reshape(1, NUM_STATE)
+    #     # print(shape(self.observation.reshape(1,NUM_STATE)))
+    #     # print(shape(DUMMY_VALUE))
+    #     # print(shape(DUMMY_ACTION))
+    #     p = self.actor.predict([self.observation, DUMMY_VALUE, DUMMY_ACTION])
+    #     if self.val is False:
+    #         action = action_matrix = p[0] + np.random.normal(loc=0, scale=NOISE, size=p[0].shape)
+    #     else:
+    #         action = action_matrix = p[0]
+    #     return action, action_matrix, p
     
     def build_actor_continuous(self):
         state_input = Input(shape=(NUM_STATE,))
@@ -195,7 +199,24 @@ def _callback(data_sub):
             is_new_episode = False
             
         if len(batch[0]) < BUFFER_SIZE:
-            action, action_matrix, predicted_action = agent.get_action_continuous(observation)
+            ###### GET_ACTION_CONTINUOUS CODE ############
+            obs = np.array(observation)
+            # print(self.observation)
+            # print(self.observation.reshape(1, NUM_STATE)).reshape(1, NUM_STATE)
+            # self.observation.reshape(1, NUM_STATE)
+            # print(shape(self.observation.reshape(1,NUM_STATE)))
+            # print(shape(DUMMY_VALUE))
+            # print(shape(DUMMY_ACTION))
+            predicted_action = agent.actor.predict([obs, DUMMY_VALUE, DUMMY_ACTION])
+            if val is False:
+                action = action_matrix = predicted_action[0] + np.random.normal(loc=0, scale=NOISE, size=predicted_action[0].shape)
+            else:
+                action = action_matrix = predicted_action[0]
+            
+            #############################################
+            
+            # action, action_matrix, predicted_action = agent.get_action_continuous(observation)
+            
         ######### STEP CODE ###############    
         msgActions.linear.x = action[0]
         msgActions.linear.z = action[2]
