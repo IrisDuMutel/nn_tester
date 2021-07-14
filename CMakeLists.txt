@@ -163,6 +163,9 @@ catkin_install_python(PROGRAMS
   src/nn_tester_runtime.py
   src/RLRollerBall.py
   src/SimplePubSub.py
+  src/Test.py
+  src/gym_test.py
+  src/RLRollerBallOriginal.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

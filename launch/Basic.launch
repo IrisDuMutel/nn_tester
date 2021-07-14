@@ -1,5 +1,5 @@
 <launch>
 
-  <node pkg="nn_tester" name="RLRollerBall" type="RLRollerBall.py" output="screen"/>
+  <node pkg="nn_tester" name="RLRollerBall" type="Test.py" output="screen"/>
 
 </launch>
